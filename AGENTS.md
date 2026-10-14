@@ -2,24 +2,28 @@
 
 ## Project Structure & Module Organization
 
-Apart from this guide, the directory has no application code, test suite, asset directory, or project manifest. When adding the first implementation, keep source files in `src/`, automated tests in `tests/`, and static files in `assets/` if needed. Mirror source paths in test names where practical, and document any new top-level directory in a `README.md`.
+This is an unpacked Manifest V3 extension; `manifest.json` is its entry point. `src/background.js` stores settings and registers the early user script. `src/zone-math.js` converts IANA time zones, `src/timezone-shim.js` overrides page `Date` and `Intl` behavior, and `src/popup.*` implements the Russian-language controls. Automated tests and the local two-origin smoke pages live in `tests/`. Design and implementation notes are in `docs/superpowers/`.
 
 ## Build, Test, and Development Commands
 
-No build, run, lint, or test commands are configured yet. Add the relevant manifest and scripts with the first code change, then document the exact setup and verification commands in `README.md`. For a Node-based project, for example, expose `npm run dev`, `npm test`, and `npm run build` through `package.json`; do not assume those commands work until the scripts exist.
+- `npm test` runs all Node.js tests; use Node.js 22 or newer.
+- `node tests/serve-smoke.mjs` serves the smoke page on port 8765 and its cross-origin frame on port 8766. Load the repository as an unpacked extension, select a zone, then visit `http://127.0.0.1:8765/?zone=America/New_York` and check `allPass: true`.
+- `node --check src/background.js` checks JavaScript syntax; repeat for other changed scripts. `git diff --check` checks patch whitespace.
+
+There is no bundling step or production dependency installation. Chromium loads the files directly from this directory.
 
 ## Coding Style & Naming Conventions
 
-There is no established language or formatter. Choose one formatter and lint configuration when introducing source code, commit their configuration, and format changed files before review. Use descriptive file names that match the language ecosystem; for JavaScript, `src/time-zone-picker.js` and `tests/time-zone-picker.test.js` illustrate a consistent pattern. Keep functions focused and avoid adding generated files to source directories.
+Use two-space indentation, semicolons, single quotes in JavaScript, and descriptive camelCase names for functions and variables. Keep source file names in kebab-case, such as `zone-math.js`; name matching tests `zone-math.test.js`. Follow the existing style when editing HTML and CSS. No formatter or linter is configured; run the syntax and whitespace checks above before review.
 
 ## Testing Guidelines
 
-No test framework or coverage threshold exists yet. Add tests alongside the first feature and include a regression test with each bug fix. Name tests for the behavior they verify, keep fixtures small, and record the test command in the project manifest and `README.md`. Run the full available test suite before opening a pull request.
+Tests use Node.js `node:test` and `assert/strict`, with isolated VM contexts for page and service-worker code. Add behavior-focused regression tests for changes to date parsing, daylight-saving transitions, script registration, or popup state. There is no numeric coverage threshold. Run `npm test` and, for injection changes, verify both the main smoke page and cross-origin frame in Chrome and Vivaldi.
 
 ## Commit & Pull Request Guidelines
 
-This directory has no Git history, so there is no existing commit convention to follow. Use short, imperative subjects such as `Add initial project scaffold`. Pull requests should explain the change, link related issues when available, list commands run and their results, and include screenshots for visible UI changes.
+Recent commits use short Conventional Commit subjects such as `feat: add timezone selection popup` and `docs: verify Chrome and Vivaldi installation`. Keep that pattern. A pull request should explain the user-visible effect, link a related issue when one exists, list verification results, and include a popup screenshot for UI changes.
 
 ## Security & Configuration
 
-Keep credentials and local configuration out of version control. If configuration becomes necessary, provide a safe example file and document required variables in `README.md`.
+Keep the `userScripts` and HTTP(S) permissions aligned with the feature. Never commit browser profiles, credentials, or generated test artifacts. Users must enable **Allow User Scripts** for the extension in their browser settings.
