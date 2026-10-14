@@ -1,0 +1,15 @@
+:root { color-scheme: light dark; font: 13px/1.4 system-ui, sans-serif; }
+body { width: 320px; margin: 0; }
+main { padding: 16px; }
+h1 { margin: 0 0 16px; font-size: 18px; }
+label { display: block; margin: 12px 0 5px; font-weight: 600; }
+input[type="search"], select, button { box-sizing: border-box; width: 100%; font: inherit; }
+input[type="search"], select { padding: 6px; border: 1px solid #888; border-radius: 5px; }
+select { margin-top: 4px; }
+option { padding: 2px; }
+.switch { display: flex; align-items: center; gap: 8px; }
+.switch input { margin: 0; }
+button { margin-top: 14px; padding: 8px; cursor: pointer; }
+#status { min-height: 1.4em; font-weight: 600; }
+.hint { margin: 6px 0; color: #666; font-size: 12px; }
+.setup { padding: 9px; border: 1px solid #b66; border-radius: 5px; }
