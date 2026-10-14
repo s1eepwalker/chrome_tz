@@ -39,3 +39,30 @@ test('Kolkata has a negative Date-style offset', () => {
   assert.equal(parts.hour, 0);
   assert.equal(parts.offsetMinutes, -330);
 });
+
+test('BCE wall years use astronomical numbering', () => {
+  const { getWallParts } = loadMath();
+  const yearZero = getWallParts(Date.parse('0000-01-15T12:00:00.000Z'), 'UTC');
+  assert.equal(yearZero.year, 0);
+  assert.equal(yearZero.offsetMinutes, 0);
+  const caesar = getWallParts(Date.parse('-000044-01-15T12:00:00.000Z'), 'UTC');
+  assert.equal(caesar.year, -44);
+});
+
+test('local dates near TimeClip maximum skip invalid offset probes', () => {
+  const { resolveLocal } = loadMath();
+  const epoch = resolveLocal({ year: 275760, month: 9, day: 12, hour: 0,
+    minute: 0, second: 0, millisecond: 0 }, 'America/New_York');
+  assert.equal(epoch, 8639999928000000);
+});
+
+test('valid boundary instants retain a wall offset across the local date boundary', () => {
+  const { getWallParts } = loadMath();
+  const wall = getWallParts(8640000000000000, 'Asia/Kolkata');
+  assert.equal(wall.year, 275760);
+  assert.equal(wall.month, 9);
+  assert.equal(wall.day, 13);
+  assert.equal(wall.hour, 5);
+  assert.equal(wall.minute, 30);
+  assert.equal(wall.offsetMinutes, -330);
+});

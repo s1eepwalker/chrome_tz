@@ -58,12 +58,16 @@
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const weekday = wall => {
     const date = new NativeDate(0);
-    date.setUTCFullYear(wall.year, wall.month - 1, wall.day);
-    return date.getUTCDay();
+    const anchorDay = wall.year < 0 ? 28 : 1;
+    date.setUTCFullYear(wall.year, wall.month - 1, anchorDay);
+    return (date.getUTCDay() + (wall.day - anchorDay) % 7 + 7) % 7;
   };
-  const dateText = wall => `${weekdays[weekday(wall)]} ${months[wall.month - 1]} ${two(wall.day)} ${String(wall.year).padStart(4, '0')}`;
+  const dateText = wall => {
+    const year = `${wall.year < 0 ? '-' : ''}${String(Math.abs(wall.year)).padStart(4, '0')}`;
+    return `${weekdays[weekday(wall)]} ${months[wall.month - 1]} ${two(wall.day)} ${year}`;
+  };
   const timeText = (date, wall) => {
-    const signed = -wall.offsetMinutes;
+    const signed = -Math.trunc(wall.offsetMinutes);
     const offset = `${signed < 0 ? '-' : '+'}${two(Math.floor(Math.abs(signed) / 60))}${two(Math.abs(signed) % 60)}`;
     const label = new NativeDateTimeFormat('en-US', { timeZone: state.zone, timeZoneName: 'long' })
       .formatToParts(date).find(part => part.type === 'timeZoneName')?.value || state.zone;
@@ -79,7 +83,7 @@
     getMinutes: wall => wall.minute,
     getSeconds: wall => wall.second,
     getMilliseconds: wall => wall.millisecond,
-    getTimezoneOffset: wall => wall.offsetMinutes,
+    getTimezoneOffset: wall => Math.trunc(wall.offsetMinutes),
     getYear: wall => wall.year - 1900
   };
   for (const [name, pick] of Object.entries(localGetters)) {
@@ -136,16 +140,36 @@
     };
   }
 
-  const localIso = /^([+-]?\d{4,6})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+  const localIso = /^([+-]?\d{4,6})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/;
   function parseDate(value) {
-    const match = typeof value === 'string' ? localIso.exec(value) : null;
-    if (!match) return state.parse.call(NativeDate, value);
-    if (Number.isNaN(state.parse.call(NativeDate, `${value}Z`))) return NaN;
+    if (typeof value === 'symbol') return state.parse.call(NativeDate, value);
+    const input = String(value);
+    const match = localIso.exec(input);
+    if (!match) return state.parse.call(NativeDate, input);
+    if (Number.isNaN(state.parse.call(NativeDate, `${input}Z`))) return NaN;
     return math.resolveLocal({
       year: Number(match[1]), month: Number(match[2]), day: Number(match[3]),
       hour: Number(match[4]), minute: Number(match[5]), second: Number(match[6] || 0),
-      millisecond: Number((match[7] || '').padEnd(3, '0'))
+      millisecond: Number((match[7] || '').slice(0, 3).padEnd(3, '0'))
     }, state.zone);
+  }
+
+  function primitiveDateValue(value) {
+    if (value === null || typeof value !== 'object' || value instanceof NativeDate) return value;
+    const exotic = value[Symbol.toPrimitive];
+    if (exotic !== undefined && exotic !== null) {
+      if (typeof exotic !== 'function') throw new TypeError('Cannot convert object to primitive value');
+      const result = exotic.call(value, 'default');
+      if (Object(result) === result) throw new TypeError('Cannot convert object to primitive value');
+      return result;
+    }
+    for (const name of ['valueOf', 'toString']) {
+      const method = value[name];
+      if (typeof method !== 'function') continue;
+      const result = method.call(value);
+      if (Object(result) !== result) return result;
+    }
+    throw new TypeError('Cannot convert object to primitive value');
   }
 
   const DateProxy = new Proxy(NativeDate, {
@@ -157,8 +181,12 @@
         const epoch = math.resolveLocal({ year: localYear, month: month + 1, day, hour, minute, second, millisecond }, state.zone);
         return Reflect.construct(target, [epoch], newTarget);
       }
-      if (args.length === 1 && typeof args[0] === 'string' && localIso.test(args[0])) {
-        return Reflect.construct(target, [parseDate(args[0])], newTarget);
+      if (args.length === 1) {
+        const value = primitiveDateValue(args[0]);
+        if (typeof value === 'string' && localIso.test(value)) {
+          return Reflect.construct(target, [parseDate(value)], newTarget);
+        }
+        return Reflect.construct(target, [value], newTarget);
       }
       return Reflect.construct(target, args, newTarget);
     },

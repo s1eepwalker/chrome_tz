@@ -39,6 +39,37 @@ test('local constructor, parsing, and setters resolve a DST gap', () => {
   assert.equal(run('new Date("2024-03-10T06:30:00Z").setHours(2)'), expected);
 });
 
+test('accepted local strings with long fractions and string objects use the selected zone', () => {
+  const { run, send } = page();
+  send({ mode: 'apply', timeZone: 'America/New_York' });
+  const expected = Date.parse('2024-03-10T07:30:00.123Z');
+  assert.equal(run('Date.parse("2024-03-10T02:30:00.1234")'), expected);
+  assert.equal(run('Date.parse(new String("2024-03-10T02:30:00.1234"))'), expected);
+  assert.equal(run('new Date(new String("2024-03-10T02:30:00.1234")).getTime()'), expected);
+});
+
+test('BCE constructor, getters and strings preserve historical wall time', () => {
+  const { run, send } = page();
+  send({ mode: 'apply', timeZone: 'America/New_York' });
+  assert.equal(run('new Date(-44, 0, 15, 7, 3, 58).toISOString()'), '-000044-01-15T12:00:00.000Z');
+  assert.equal(run('new Date("-000044-01-15T12:00:00Z").getFullYear()'), -44);
+  assert.equal(run('new Date("-000044-01-15T12:00:00Z").getTimezoneOffset()'), 296);
+  assert.match(run('new Date("-000044-01-15T12:00:00Z").toString()'),
+    /^Sun Jan 15 -0044 07:03:58 GMT-0456 /);
+});
+
+test('numeric local fields truncate fractions before constructing an instant', () => {
+  const { run, send } = page();
+  send({ mode: 'apply', timeZone: 'America/New_York' });
+  assert.equal(run('new Date(2024, 0, 1.5, 1.5, 0.5).toISOString()'), '2024-01-01T06:00:00.000Z');
+});
+
+test('minimum valid instant formats its previous-day local date', () => {
+  const { run, send } = page();
+  send({ mode: 'apply', timeZone: 'America/New_York' });
+  assert.equal(run('new Date(-8640000000000000).toDateString()'), 'Mon Apr 19 -271821');
+});
+
 test('month and full-year setters use zero-based month arguments', () => {
   const { run, send } = page();
   send({ mode: 'apply', timeZone: 'America/New_York' });

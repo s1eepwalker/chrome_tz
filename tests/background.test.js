@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function worker(initial = {}, { available = true, failTab = null, registrationError = null } = {}) {
+function worker(initial = {}, { available = true, failTab = null, registrationError = null, getScriptsError = null } = {}) {
   const settings = { enabled: false, timeZone: '', ...initial };
   const scripts = new Map();
   const executed = [];
@@ -32,7 +32,10 @@ function worker(initial = {}, { available = true, failTab = null, registrationEr
     }
   };
   if (available) chrome.userScripts = {
-    async getScripts() { return [...scripts.values()]; },
+    async getScripts() {
+      if (getScriptsError) throw new Error(getScriptsError);
+      return [...scripts.values()];
+    },
     async register(items) {
       if (registrationError) throw new Error(registrationError);
       for (const item of items) {
@@ -156,4 +159,22 @@ test('reload action touches only web tabs', async () => {
   const status = await app.message({ type: 'reloadTabs' });
   assert.equal(status.ok, true);
   assert.deepEqual(app.reloaded, [1, 3]);
+});
+
+test('reload keeps setup guidance when Vivaldi refuses script registration', async () => {
+  const app = worker({ enabled: true, timeZone: 'UTC' },
+    { registrationError: 'No changes to loaded scripts would result from this operation.' });
+  const status = await app.message({ type: 'reloadTabs' });
+  assert.equal(status.ok, false);
+  assert.equal(status.userScriptsAvailable, false);
+  assert.match(status.error, /Allow User Scripts/);
+});
+
+test('unrelated getScripts failure retains its diagnostic message', async () => {
+  const app = worker({ enabled: true, timeZone: 'UTC' },
+    { getScriptsError: 'Service unavailable' });
+  const status = await app.message({ type: 'getStatus' });
+  assert.equal(status.ok, false);
+  assert.equal(status.userScriptsAvailable, true);
+  assert.match(status.error, /Service unavailable/);
 });

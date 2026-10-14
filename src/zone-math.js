@@ -2,6 +2,7 @@
   const NativeDate = Date;
   const NativeDateTimeFormat = Intl.DateTimeFormat;
   const formatters = new Map();
+  const maxEpoch = 8640000000000000;
 
   function formatter(zone) {
     if (!formatters.has(zone)) {
@@ -9,6 +10,7 @@
         timeZone: zone,
         hourCycle: 'h23',
         year: 'numeric',
+        era: 'short',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -21,19 +23,23 @@
 
   function utcValue(parts) {
     const date = new NativeDate(0);
-    date.setUTCFullYear(parts.year, parts.month - 1, parts.day);
-    date.setUTCHours(parts.hour, parts.minute, parts.second, parts.millisecond);
-    return date.getTime();
+    // Anchor inside TimeClip so a valid instant can still have an out-of-range wall clock.
+    const anchorDay = parts.year < 0 ? 28 : 1;
+    date.setUTCFullYear(parts.year, parts.month - 1, anchorDay);
+    return date.getTime() + (Math.trunc(parts.day) - anchorDay) * 86400000 +
+      Math.trunc(parts.hour) * 3600000 + Math.trunc(parts.minute) * 60000 +
+      Math.trunc(parts.second) * 1000 + Math.trunc(parts.millisecond);
   }
 
   function getWallParts(epochMs, zone) {
-    if (!Number.isFinite(epochMs)) throw new RangeError('Invalid time value');
+    if (!Number.isFinite(epochMs) || Math.abs(epochMs) > maxEpoch) throw new RangeError('Invalid time value');
     const values = {};
     for (const part of formatter(zone).formatToParts(new NativeDate(epochMs))) {
-      if (part.type !== 'literal') values[part.type] = Number(part.value);
+      if (part.type === 'era') values.era = part.value;
+      else if (part.type !== 'literal') values[part.type] = Number(part.value);
     }
     const wall = {
-      year: values.year,
+      year: values.era === 'BC' ? 1 - values.year : values.year,
       month: values.month,
       day: values.day,
       hour: values.hour,
@@ -49,9 +55,12 @@
     if (!Number.isFinite(desired)) return NaN;
     const offsets = new Set();
     for (const hours of [-48, -24, -12, 0, 12, 24, 48]) {
-      offsets.add(getWallParts(desired + hours * 3600000, zone).offsetMinutes);
+      const sample = desired + hours * 3600000;
+      if (Math.abs(sample) <= maxEpoch) offsets.add(getWallParts(sample, zone).offsetMinutes);
     }
-    const candidates = [...offsets].map(offset => desired + offset * 60000);
+    const candidates = [...offsets].map(offset => desired + offset * 60000)
+      .filter(epoch => Math.abs(epoch) <= maxEpoch);
+    if (!candidates.length) return NaN;
     const exact = candidates.filter(epoch => utcValue(getWallParts(epoch, zone)) === desired);
     if (exact.length) return Math.min(...exact);
 

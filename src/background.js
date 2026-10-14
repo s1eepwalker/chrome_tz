@@ -37,6 +37,14 @@ function webTab(tab) {
   return Number.isInteger(tab.id) && /^https?:\/\//i.test(tab.url || '');
 }
 
+function scriptFailure(current, failure) {
+  const message = failure.message || String(failure);
+  // Vivaldi can expose the API while its per-extension switch is off.
+  const toggleOff = /No changes to loaded scripts would result from this operation|Duplicate script ID|User scripts are not enabled/i.test(message);
+  return { ok: false, ...current, userScriptsAvailable: !toggleOff,
+    error: toggleOff ? 'Enable Allow User Scripts in the extension details.' : message };
+}
+
 async function applyOpenTabs(mode, timeZone) {
   const tabs = (await chrome.tabs.query({})).filter(webTab);
   const attempts = await Promise.allSettled(tabs.map(tab => chrome.userScripts.execute({
@@ -55,8 +63,8 @@ async function reconcile(current, applyOpen = false) {
   let registered;
   try {
     registered = await chrome.userScripts.getScripts({ ids: [SCRIPT_ID] });
-  } catch {
-    return { ok: false, ...current, userScriptsAvailable: false, error: 'Enable Allow User Scripts in the extension details.' };
+  } catch (failure) {
+    return scriptFailure(current, failure);
   }
   try {
     if (current.enabled) {
@@ -81,21 +89,17 @@ async function reconcile(current, applyOpen = false) {
       ? await applyOpenTabs(current.enabled ? 'apply' : 'restore', current.timeZone)
       : undefined;
     return { ok: true, ...current, userScriptsAvailable: true, ...(error ? { error } : {}) };
-  } catch (failure) {
-    const message = failure.message || String(failure);
-    // Vivaldi exposes the API with its per-extension switch off, then rejects registration.
-    const toggleOff = /No changes to loaded scripts would result from this operation|Duplicate script ID/i.test(message);
-    return { ok: false, ...current, userScriptsAvailable: !toggleOff,
-      error: toggleOff ? 'Enable Allow User Scripts in the extension details.' : message };
-  }
+  } catch (failure) { return scriptFailure(current, failure); }
 }
 
 async function reloadTabs() {
+  const current = await settings();
+  const status = await reconcile(current);
+  if (!status.ok) return status;
   const tabs = (await chrome.tabs.query({})).filter(webTab);
   const attempts = await Promise.allSettled(tabs.map(tab => chrome.tabs.reload(tab.id)));
   const failures = attempts.filter(result => result.status === 'rejected').length;
-  const current = await settings();
-  return { ok: failures === 0, ...current, userScriptsAvailable: !!chrome.userScripts,
+  return { ...status, ok: failures === 0,
     ...(failures ? { error: `Could not reload ${failures} tab${failures === 1 ? '' : 's'}.` } : {}) };
 }
 
