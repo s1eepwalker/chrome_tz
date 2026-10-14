@@ -40,9 +40,15 @@ test('renders stored zone, enabled state and list including UTC', async () => {
   assert.equal(app.elements.enabled.checked, true);
   assert.equal(app.elements['zone-select'].value, 'Asia/Tokyo');
   assert.deepEqual(app.elements['zone-select'].children.map(option => option.value),
-    ['UTC', 'America/New_York', 'Asia/Tokyo', 'Europe/London']);
+    ['UTC', 'America/New_York', 'Asia/Tokyo', 'Europe/London', 'Asia/Kolkata']);
   assert.match(app.elements.status.textContent, /Asia\/Tokyo/);
   assert.deepEqual(app.sent, [{ type: 'getStatus' }]);
+});
+
+test('offers Asia/Kolkata alongside browser-provided canonical zones', async () => {
+  const app = popup();
+  await app.flush();
+  assert.equal(app.elements['zone-select'].children.some(option => option.value === 'Asia/Kolkata'), true);
 });
 
 test('search filters zone list; selection enables override', async () => {

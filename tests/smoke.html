@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Timezone Override smoke test</title>
+  <script>
+    // This runs while HTML is parsed, so late injection is visible in the report.
+    const fixed = new Date('2024-01-15T12:34:56.000Z');
+    const parentResult = {
+      zone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+      offset: fixed.getTimezoneOffset(),
+      hour: fixed.getHours(),
+      day: fixed.getDate(),
+      utc: new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', hour: '2-digit', hourCycle: 'h23' }).format(fixed)
+    };
+    let frameResult;
+    const expectedByZone = {
+      'America/New_York': { offset: 300, hour: 7, day: 15 },
+      'Asia/Kolkata': { offset: -330, hour: 18, day: 15 }
+    };
+    const requested = new URLSearchParams(location.search).get('zone');
+    const expected = expectedByZone[requested];
+
+    function judge(result) {
+      return !!result && result.zone === requested && result.offset === expected.offset &&
+        result.hour === expected.hour && result.day === expected.day && result.utc === '12';
+    }
+
+    function show() {
+      const report = document.getElementById('report');
+      if (!report) return;
+      const parentPass = expected ? judge(parentResult) : null;
+      const framePass = expected ? judge(frameResult) : null;
+      report.textContent = JSON.stringify({ requested, parent: parentResult, frame: frameResult || null,
+        parentPass, framePass, allPass: parentPass === true && framePass === true }, null, 2);
+    }
+
+    addEventListener('message', event => {
+      if (event.origin !== 'http://127.0.0.1:8766' || event.data?.type !== 'chrome-tz-smoke-frame') return;
+      frameResult = event.data.result;
+      show();
+    });
+    addEventListener('DOMContentLoaded', show);
+  </script>
+</head>
+<body>
+  <h1>Timezone Override smoke test</h1>
+  <p>Open with <code>?zone=America/New_York</code> or <code>?zone=Asia/Kolkata</code> after selecting that zone in the popup. Both results should pass.</p>
+  <pre id="report">Waiting for the cross-origin frame...</pre>
+  <iframe title="Cross-origin time-zone probe" src="http://127.0.0.1:8766/"></iframe>
+</body>
+</html>

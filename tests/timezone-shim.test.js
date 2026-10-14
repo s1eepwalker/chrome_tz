@@ -82,7 +82,8 @@ test('re-injection switches zone and restore recovers native APIs', () => {
   const { run, send, nativeZone } = page();
   send({ mode: 'apply', timeZone: 'America/New_York' });
   send({ mode: 'apply', timeZone: 'Asia/Kolkata' });
-  assert.equal(run('Intl.DateTimeFormat().resolvedOptions().timeZone'), 'Asia/Calcutta');
+  assert.equal(run('Intl.DateTimeFormat().resolvedOptions().timeZone'), 'Asia/Kolkata');
+  assert.equal(run('Intl.DateTimeFormat("en-US", {timeZone:"UTC"}).resolvedOptions().timeZone'), 'UTC');
   assert.equal(run('new Date("2024-01-01T00:00:00Z").getTimezoneOffset()'), -330);
   send({ mode: 'restore' });
   assert.equal(run('Intl.DateTimeFormat().resolvedOptions().timeZone'), nativeZone);

@@ -18,6 +18,8 @@
       'toTimeString', 'toLocaleString', 'toLocaleDateString', 'toLocaleTimeString'
     ]) originals[name] = prototype[name];
     state = { NativeDate, NativeDateTimeFormat, originals, zone: null,
+      nativeResolvedOptions: NativeDateTimeFormat.prototype.resolvedOptions,
+      formatterZones: new WeakMap(),
       getTime: prototype.getTime, setTime: prototype.setTime,
       parse: NativeDate.parse };
     Object.defineProperty(globalThis, key, { value: state, configurable: true });
@@ -29,6 +31,7 @@
     if (!state.zone) return;
     globalThis.Date = NativeDate;
     Intl.DateTimeFormat = NativeDateTimeFormat;
+    NativeDateTimeFormat.prototype.resolvedOptions = state.nativeResolvedOptions;
     for (const [name, method] of Object.entries(originals)) NativeDate.prototype[name] = method;
     state.zone = null;
     state.installed = false;
@@ -167,13 +170,27 @@
   const DateTimeFormatProxy = new Proxy(NativeDateTimeFormat, {
     apply(target, thisArg, args) {
       const [locales, options] = args;
-      return Reflect.apply(target, thisArg, [locales, withZone(options)]);
+      const formatter = Reflect.apply(target, thisArg, [locales, withZone(options)]);
+      if (options === undefined || (options !== null && options.timeZone === undefined)) {
+        state.formatterZones.set(formatter, state.zone);
+      }
+      return formatter;
     },
     construct(target, args, newTarget) {
       const [locales, options] = args;
-      return Reflect.construct(target, [locales, withZone(options)], newTarget);
+      const formatter = Reflect.construct(target, [locales, withZone(options)], newTarget);
+      if (options === undefined || (options !== null && options.timeZone === undefined)) {
+        state.formatterZones.set(formatter, state.zone);
+      }
+      return formatter;
     }
   });
+  NativeDateTimeFormat.prototype.resolvedOptions = function () {
+    const result = state.nativeResolvedOptions.call(this);
+    const selected = state.formatterZones.get(this);
+    if (selected) result.timeZone = selected;
+    return result;
+  };
   globalThis.Date = DateProxy;
   Intl.DateTimeFormat = DateTimeFormatProxy;
   state.installed = true;

@@ -5,7 +5,7 @@ const reload = document.getElementById('reload');
 const status = document.getElementById('status');
 const setup = document.getElementById('setup');
 
-const zones = [...new Set(['UTC', ...Intl.supportedValuesOf('timeZone')])];
+const zones = [...new Set(['UTC', ...Intl.supportedValuesOf('timeZone'), 'Asia/Kolkata'])];
 let current = { enabled: false, timeZone: '', userScriptsAvailable: true };
 
 setup.textContent = 'Chrome / Vivaldi: откройте сведения об этом расширении и включите «Allow User Scripts» (Разрешить пользовательские скрипты). Затем откройте окно расширения снова.';

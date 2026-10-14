@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Timezone frame probe</title>
+<script>
+  // Capture during HTML parsing, before load and before the parent reads the frame.
+  const fixed = new Date('2024-01-15T12:34:56.000Z');
+  const result = {
+    zone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+    offset: fixed.getTimezoneOffset(),
+    hour: fixed.getHours(),
+    day: fixed.getDate(),
+    utc: new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', hour: '2-digit', hourCycle: 'h23' }).format(fixed)
+  };
+  parent.postMessage({ type: 'chrome-tz-smoke-frame', result }, 'http://127.0.0.1:8765');
+</script>
+<body><p>Cross-origin frame result sent to the parent page.</p></body>

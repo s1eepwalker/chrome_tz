@@ -26,6 +26,13 @@ function payloadSources(mode, timeZone) {
   ];
 }
 
+function sameScript(left, right) {
+  return left.runAt === right.runAt && left.world === right.world &&
+    left.allFrames === right.allFrames &&
+    JSON.stringify(left.matches) === JSON.stringify(right.matches) &&
+    JSON.stringify(left.js) === JSON.stringify(right.js);
+}
+
 function webTab(tab) {
   return Number.isInteger(tab.id) && /^https?:\/\//i.test(tab.url || '');
 }
@@ -62,8 +69,11 @@ async function reconcile(current, applyOpen = false) {
         world: 'MAIN',
         allFrames: true
       };
-      if (registered.length) await chrome.userScripts.update([script]);
-      else await chrome.userScripts.register([script]);
+      if (registered.length) {
+        if (!sameScript(registered[0], script)) await chrome.userScripts.update([script]);
+      } else {
+        await chrome.userScripts.register([script]);
+      }
     } else if (registered.length) {
       await chrome.userScripts.unregister({ ids: [SCRIPT_ID] });
     }
@@ -72,7 +82,11 @@ async function reconcile(current, applyOpen = false) {
       : undefined;
     return { ok: true, ...current, userScriptsAvailable: true, ...(error ? { error } : {}) };
   } catch (failure) {
-    return { ok: false, ...current, userScriptsAvailable: true, error: failure.message || String(failure) };
+    const message = failure.message || String(failure);
+    // Vivaldi exposes the API with its per-extension switch off, then rejects registration.
+    const toggleOff = /No changes to loaded scripts would result from this operation|Duplicate script ID/i.test(message);
+    return { ok: false, ...current, userScriptsAvailable: !toggleOff,
+      error: toggleOff ? 'Enable Allow User Scripts in the extension details.' : message };
   }
 }
 

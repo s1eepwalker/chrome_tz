@@ -4,10 +4,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function worker(initial = {}, { available = true, failTab = null } = {}) {
+function worker(initial = {}, { available = true, failTab = null, registrationError = null } = {}) {
   const settings = { enabled: false, timeZone: '', ...initial };
   const scripts = new Map();
   const executed = [];
+  const updates = [];
   const reloaded = [];
   const listeners = {};
   const tabs = [
@@ -32,8 +33,14 @@ function worker(initial = {}, { available = true, failTab = null } = {}) {
   };
   if (available) chrome.userScripts = {
     async getScripts() { return [...scripts.values()]; },
-    async register(items) { for (const item of items) scripts.set(item.id, item); },
-    async update(items) { for (const item of items) scripts.set(item.id, item); },
+    async register(items) {
+      if (registrationError) throw new Error(registrationError);
+      for (const item of items) {
+        if (scripts.has(item.id)) throw new Error(`Duplicate script ID '${item.id}'`);
+        scripts.set(item.id, item);
+      }
+    },
+    async update(items) { updates.push(...items); for (const item of items) scripts.set(item.id, item); },
     async unregister({ ids }) { for (const id of ids) scripts.delete(id); },
     async execute(injection) {
       if (injection.target.tabId === failTab) throw new Error('tab inaccessible');
@@ -44,7 +51,7 @@ function worker(initial = {}, { available = true, failTab = null } = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../src/background.js'), 'utf8');
   vm.runInContext(source, context);
   const message = input => new Promise(resolve => listeners.message(input, {}, resolve));
-  return { settings, scripts, executed, reloaded, listeners, message, chrome };
+  return { settings, scripts, executed, updates, reloaded, listeners, message, chrome };
 }
 
 test('initial state is disabled and exposes API availability', async () => {
@@ -92,6 +99,14 @@ test('changing and disabling the zone updates then unregisters one script', asyn
   assert.equal(app.executed.at(-1).js[0].code.includes('restore'), true);
 });
 
+test('reopening popup with an unchanged zone does not update a registered script', async () => {
+  const app = worker();
+  await app.message({ type: 'setSettings', enabled: true, timeZone: 'UTC' });
+  const status = await app.message({ type: 'getStatus' });
+  assert.equal(status.ok, true);
+  assert.equal(app.updates.length, 0);
+});
+
 test('unavailable User Scripts API preserves the selected zone and reports setup', async () => {
   const app = worker({ enabled: true, timeZone: 'UTC' }, { available: false });
   const status = await app.message({ type: 'getStatus' });
@@ -99,6 +114,23 @@ test('unavailable User Scripts API preserves the selected zone and reports setup
   assert.equal(status.timeZone, 'UTC');
   assert.equal(status.ok, false);
   assert.match(status.error, /Allow User Scripts/i);
+});
+
+test('Vivaldi reports the disabled per-extension toggle as setup guidance', async () => {
+  const app = worker({ enabled: true, timeZone: 'UTC' },
+    { registrationError: 'No changes to loaded scripts would result from this operation.' });
+  const status = await app.message({ type: 'getStatus' });
+  assert.equal(status.ok, false);
+  assert.equal(status.userScriptsAvailable, false);
+  assert.match(status.error, /Allow User Scripts/);
+});
+
+test('Vivaldi duplicate-ID response with its toggle off also shows setup guidance', async () => {
+  const app = worker({ enabled: true, timeZone: 'UTC' },
+    { registrationError: "Duplicate script ID 'chrome-tz-override'" });
+  const status = await app.message({ type: 'getStatus' });
+  assert.equal(status.userScriptsAvailable, false);
+  assert.match(status.error, /Allow User Scripts/);
 });
 
 test('install and startup restore registration from storage', async () => {
